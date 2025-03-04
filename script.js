@@ -5,6 +5,7 @@ import { asyncLLM } from "https://cdn.jsdelivr.net/npm/asyncllm@2";
 import { Marked } from "https://cdn.jsdelivr.net/npm/marked@13/+esm";
 import hljs from "https://cdn.jsdelivr.net/npm/highlight.js@11/+esm";
 
+// Log in to LLMFoundry
 const { token } = await fetch("https://llmfoundry.straive.com/token", { credentials: "include" }).then((res) =>
   res.json()
 );
@@ -46,8 +47,8 @@ $taskForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const task = e.target.task.value;
 
-  let step = {};
-  const steps = [step];
+  let message = {};
+  const messages = [{ role: "user", content: task }, message];
   for await (const { content } of asyncLLM("https://llmfoundry.straive.com/openai/v1/chat/completions", {
     ...request,
     body: JSON.stringify({
@@ -56,25 +57,63 @@ $taskForm.addEventListener("submit", async (e) => {
       messages: [
         {
           role: "system",
-          content: `Generate JS code for the following task like this:
+          content: `You are an JavaScript API expert.
+The user will provide a task.
+Explore multiple ways of solving the task using the appropriate API.
+Pick the one MOST suited for the task (efficient, easy to implement, simple).
+Generate JS code like this:
 
 \`\`\`js
-async function run(params) {
+export async function run(params) {
   // ... code to fetch() from the API ...
   // ... code to calculate the result ...
   return result;
 }
 \`\`\`
 
-The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN})`,
+The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN}) and share the result.
+
+If the result does not solve the problem, repeat this process.`,
         },
-        { role: "user", content: task },
+        ...messages,
       ],
     }),
   })) {
-    step.content = content;
-    if (content) renderSteps(steps);
+    message.assistant = content;
+    if (content) renderSteps(messages);
   }
+  console.log(messages);
+
+  // Extract the code inside ```js in the last step
+  const code = messages[messages.length - 1].assistant.match(/```js(.*)```/s)[1];
+  const blob = new Blob([code], { type: "text/javascript" });
+  const module = await import(URL.createObjectURL(blob));
+  const result = await module.run({
+    GITHUB_TOKEN: "#TODO",
+  });
+  messages.push({ role: "user", content: result });
+  renderSteps(messages);
+
+  // Check if the result solves the problem
+  let validation = "";
+  for await (const { content } of asyncLLM("https://llmfoundry.straive.com/openai/v1/chat/completions", {
+    ...request,
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You're given a task, and a sequence of (code, result) sets.
+Does the final code + result solve the task? Begin with a YES/NO. Then explain why.`,
+        },
+        ...messages,
+      ],
+    }),
+  })) {
+    validation = content;
+  }
+  messages.at(-1).content += `\n\n${validation}`;
+  renderSteps(messages);
 });
 
 function renderSteps(steps) {
