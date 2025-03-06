@@ -6,10 +6,10 @@ import { Marked } from "https://cdn.jsdelivr.net/npm/marked@13/+esm";
 import hljs from "https://cdn.jsdelivr.net/npm/highlight.js@11/+esm";
 
 // Log in to LLMFoundry
-const { token } = await fetch("https://llmfoundry.straive.com/token", { credentials: "include" }).then((res) =>
-  res.json()
-);
-const url = "https://llmfoundry.straive.com/login?" + new URLSearchParams({ next: location.href });
+// const LLMFOUNDRY = "https://llmfoundry.straive.com";
+const LLMFOUNDRY = "http://localhost:9988";
+const { token } = await fetch(`${LLMFOUNDRY}/token`, { credentials: "include" }).then((res) => res.json());
+const url = `${LLMFOUNDRY}/login?` + new URLSearchParams({ next: location.href });
 render(
   token
     ? html`<button type="submit" class="btn btn-primary w-100 mt-3">
@@ -46,22 +46,32 @@ const $results = document.querySelector("#results");
 $taskForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const task = e.target.task.value;
+  const messages = [{ role: "user", name: "user", content: task }];
 
-  let message = {};
-  const messages = [{ role: "user", content: task }, message];
-  for await (const { content } of asyncLLM("https://llmfoundry.straive.com/openai/v1/chat/completions", {
-    ...request,
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      stream: true,
-      messages: [
-        {
-          role: "system",
-          content: `You are an JavaScript API expert.
-The user will provide a task.
-Explore multiple ways of solving the task using the appropriate API.
-Pick the one MOST suited for the task (efficient, easy to implement, simple).
-Generate JS code like this:
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const llmMessages = [...messages];
+    let message = { role: "assistant", name: "developer", content: "" };
+    messages.push(message);
+    for await (const { content } of asyncLLM(`${LLMFOUNDRY}/openai/v1/chat/completions`, {
+      ...request,
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        stream: true,
+        messages: [
+          {
+            role: "system",
+            content: `You are an JavaScript API expert. The chat transcript begins with a user provided task.
+
+First, think step-by-step about how to solve the task using API requests:
+
+- List all relevant API endpoints
+- List all relevant input query parameters of each endpoint
+- List all relevant output parameters of each endpoint
+- List all relevant values from the output parameters that'll complete the task AND help the user validate the result.
+
+Pick the approach MOST suited for the task (efficient, easy to implement, simple).
+
+Solve it by writing JS code like this:
 
 \`\`\`js
 export async function run(params) {
@@ -71,54 +81,108 @@ export async function run(params) {
 }
 \`\`\`
 
-The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN}) and share the result.
+The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN}) and share the result (or error).`,
+          },
+          ...llmMessages,
+        ],
+      }),
+    })) {
+      message.content = content;
+      if (content) renderSteps(messages);
+    }
 
-If the result does not solve the problem, repeat this process.`,
-        },
-        ...messages,
-      ],
-    }),
-  })) {
-    message.assistant = content;
-    if (content) renderSteps(messages);
+    if (message.content.includes("🟢")) {
+      renderSteps(messages);
+      return;
+    }
+
+    // Extract the code inside ```js in the last step
+    const code = [...message.content.matchAll(/```js(.*?)```/gs)][0][1];
+    const blob = new Blob([code], { type: "text/javascript" });
+    const module = await import(URL.createObjectURL(blob));
+    messages.push({ role: "user", name: "result", content: "Running code..." });
+    renderSteps(messages);
+    try {
+      const result = await module.run({ GITHUB_TOKEN: "" });
+      messages.at(-1).content = JSON.stringify(result, null, 2);
+    } catch (error) {
+      messages.at(-1).name = "error";
+      messages.at(-1).content = error.stack;
+    }
+    renderSteps(messages);
+
+    const validationMessages = [messages.at(0), messages.at(-2), messages.at(-1)];
+    let validationMessage = { role: "assistant", name: "validator", content: "" };
+    messages.push(validationMessage);
+    for await (const { content } of asyncLLM(`${LLMFOUNDRY}/openai/v1/chat/completions`, {
+      ...request,
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        stream: true,
+        messages: [
+          {
+            role: "system",
+            content: `The user provided a task. An assistant generated code. The user ran it. These are provided to you.
+
+Did the code solve the task?
+Does the result look right?
+
+If completely done, say "🟢 DONE". Else JUST explain is wrong.`,
+          },
+          ...validationMessages,
+        ],
+      }),
+    })) {
+      validationMessage.content = content;
+      if (content) renderSteps(messages);
+    }
+    if (validationMessage.content.includes("🟢")) return;
   }
-  console.log(messages);
-
-  // Extract the code inside ```js in the last step
-  const code = messages[messages.length - 1].assistant.match(/```js(.*)```/s)[1];
-  const blob = new Blob([code], { type: "text/javascript" });
-  const module = await import(URL.createObjectURL(blob));
-  const result = await module.run({
-    GITHUB_TOKEN: "#TODO",
-  });
-  messages.push({ role: "user", content: result });
-  renderSteps(messages);
-
-  // Check if the result solves the problem
-  let validation = "";
-  for await (const { content } of asyncLLM("https://llmfoundry.straive.com/openai/v1/chat/completions", {
-    ...request,
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You're given a task, and a sequence of (code, result) sets.
-Does the final code + result solve the task? Begin with a YES/NO. Then explain why.`,
-        },
-        ...messages,
-      ],
-    }),
-  })) {
-    validation = content;
-  }
-  messages.at(-1).content += `\n\n${validation}`;
-  renderSteps(messages);
 });
+
+// Define icon and color based on name
+const iconMap = {
+  user: "bi-person-fill",
+  developer: "bi-code-square",
+  result: "bi-clipboard-data",
+  error: "bi-exclamation-triangle",
+  validator: "bi-check-circle",
+};
+
+const colorMap = {
+  user: "bg-primary",
+  developer: "bg-success",
+  result: "bg-info",
+  error: "bg-danger",
+  validator: "bg-warning",
+};
 
 function renderSteps(steps) {
   render(
-    html`${steps.map((step, i) => html`<div class="step">${unsafeHTML(marked.parse(step.content))}</div>`)}`,
+    steps.map(({ name, content }, i) => {
+      const stepNum = i + 1;
+      let markdown =
+        name == "result" ? "```json\n" + content + "\n```" : name == "error" ? "```\n" + content + "\n```" : content;
+      return html`
+        <div class="card mb-3">
+          <div
+            class="card-header ${colorMap[name] || "bg-secondary"} text-white d-flex align-items-center"
+            data-bs-toggle="collapse"
+            data-bs-target="#step-${stepNum}"
+            role="button"
+            aria-expanded="true"
+          >
+            <i class="bi ${iconMap[name] || "bi-chat-dots"} me-2"></i>
+            <span class="badge bg-light text-dark me-2">${stepNum}</span>
+            <strong>${name}</strong>
+            <i class="bi bi-chevron-down ms-auto"></i>
+          </div>
+          <div class="collapse show" id="step-${stepNum}">
+            <div class="card-body">${unsafeHTML(marked.parse(markdown))}</div>
+          </div>
+        </div>
+      `;
+    }),
     $results
   );
 }
