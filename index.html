@@ -40,12 +40,56 @@
 
   <div class="container-fluid">
     <h1 class="display-1 my-4 text-center">API Agent</h1>
-    <h2 class="display-6 text-center">...</h2>
+    <h2 class="display-6 text-center">Chat with your APIs</h2>
     <div class="mx-auto my-3 narrative">
+      <p>API agent let's you ask questions that can be answered by calling APIs. It's a simple way to get answers to questions that you can't find on the web.</p>
+      <p>With API Agent, you can:</p>
+      <ul>
+        <li><strong>Access real-time data</strong> from multiple sources without writing code</li>
+        <li><strong>Automate research tasks</strong> that would normally require manual API calls</li>
+        <li><strong>Integrate information</strong> across different platforms and services</li>
+      </ul>
+      <p>Business teams use API Agent to monitor competitors, track market trends, and gather intelligence without technical expertise. Developers use it to quickly prototype and test API interactions without writing boilerplate code.</p>
+      <div class="list-group">
+        <button type="button" class="list-group-item list-group-item-action example-question">What are the most starred JavaScript repositories on GitHub?</button>
+        <button type="button" class="list-group-item list-group-item-action example-question">What are the most recent questions about React on StackOverflow?</button>
+        <button type="button" class="list-group-item list-group-item-action example-question">Who are the top contributors to the TensorFlow repository?</button>
+        <button type="button" class="list-group-item list-group-item-action example-question">What are the trending Python repositories this week?</button>
+        <button type="button" class="list-group-item list-group-item-action example-question">What are the most upvoted JavaScript questions on StackOverflow?</button>
+      </div>
     </div>
 
     <form id="task-form" class="narrative mx-auto">
+      <div class="my-3">
+        <div class="accordion mb-2" id="tokenAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                data-bs-target="#tokenCollapse" aria-expanded="false" aria-controls="tokenCollapse">
+                API Tokens (Optional)
+              </button>
+            </h2>
+            <div id="tokenCollapse" class="accordion-collapse collapse" data-bs-parent="#tokenAccordion">
+              <div class="accordion-body">
+                <div class="mb-2">
+                  <label for="github-token" class="form-label d-flex justify-content-between">GitHub Token <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Get token <i class="bi bi-box-arrow-up-right"></i></a> </label>
+                  <input type="password" class="form-control" id="github-token" placeholder="Enter GitHub token">
+                </div>
+                <div class="mb-2">
+                  <label for="stackoverflow-token" class="form-label d-flex justify-content-between">StackOverflow Token <a href="https://stackapps.com/apps/oauth/register" target="_blank" rel="noopener">Get token <i class="bi bi-box-arrow-up-right"></i></a> </label>
+                  <input type="password" class="form-control" id="stackoverflow-token" placeholder="Enter StackOverflow token">
+                </div>
+                <div class="mb-2">
+                  <label for="jira-token" class="form-label d-flex justify-content-between">Jira Token <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">Get token <i class="bi bi-box-arrow-up-right"></i></a> </label>
+                  <input type="password" class="form-control" id="jira-token" placeholder="Enter Jira token">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <input type="text" class="form-control" name="task" id="task" placeholder="Enter a task">
+
       <div id="submit-task" class="text-center"></div>
     </form>
 

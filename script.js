@@ -6,8 +6,7 @@ import { Marked } from "https://cdn.jsdelivr.net/npm/marked@13/+esm";
 import hljs from "https://cdn.jsdelivr.net/npm/highlight.js@11/+esm";
 
 // Log in to LLMFoundry
-// const LLMFOUNDRY = "https://llmfoundry.straive.com";
-const LLMFOUNDRY = "http://localhost:9988";
+const LLMFOUNDRY = "https://llmfoundry.straive.com";
 const { token } = await fetch(`${LLMFOUNDRY}/token`, { credentials: "include" }).then((res) => res.json());
 const url = `${LLMFOUNDRY}/login?` + new URLSearchParams({ next: location.href });
 render(
@@ -81,7 +80,8 @@ export async function run(params) {
 }
 \`\`\`
 
-The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN}) and share the result (or error).`,
+The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_TOKEN}) and share the result (or error).
+If these tokens are empty, don't use them.`,
           },
           ...llmMessages,
         ],
@@ -103,7 +103,11 @@ The user will call result = await run({GITHUB_TOKEN, JIRA_TOKEN, STACKOVERFLOW_T
     messages.push({ role: "user", name: "result", content: "Running code..." });
     renderSteps(messages);
     try {
-      const result = await module.run({ GITHUB_TOKEN: "" });
+      const result = await module.run({
+        GITHUB_TOKEN: document.getElementById("github-token")?.value || "",
+        STACKOVERFLOW_TOKEN: document.getElementById("stackoverflow-token")?.value || "",
+        JIRA_TOKEN: document.getElementById("jira-token")?.value || "",
+      });
       messages.at(-1).content = JSON.stringify(result, null, 2);
     } catch (error) {
       messages.at(-1).name = "error";
@@ -186,3 +190,12 @@ function renderSteps(steps) {
     $results
   );
 }
+
+// Add event listeners to example questions
+document.querySelectorAll(".example-question").forEach((button) => {
+  button.addEventListener("click", () => {
+    const task = button.textContent;
+    document.querySelector("#task").value = task;
+    $taskForm.dispatchEvent(new Event("submit"));
+  });
+});
